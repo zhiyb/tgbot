@@ -1,0 +1,13 @@
+[Unit]
+Description=Telegram Bot API server
+
+[Service]
+Type=simple
+#User=zhiyb
+#Restart=always
+#RestartSec=1
+#ExecStart=/home/zhiyb/bin/telegram-bot-api --local --api-id 1234 --api-hash abcd --http-ip-address=127.0.0.1 --http-port=8081
+ExecStart=/home/zhiyb/bin/telegram-bot-api --local --api-id 1234 --api-hash abcd --http-ip-address=10.0.0.1 --http-port=8081
+
+[Install]
+WantedBy=multi-user.target

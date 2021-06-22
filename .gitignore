@@ -1,0 +1,5 @@
+.vscode/
+__pycache__/
+database.py
+config.py
+tgapi.service
