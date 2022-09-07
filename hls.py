@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
+from telegram import ParseMode
+from telegram.ext import Updater
+from telegram.utils import helpers
 import os, traceback
 import subprocess
 from pathlib import Path
 from telegram.ext import CommandHandler
 from config import hls_url
+import services
+
+__all__ = ['register']
 
 # HLS archive
 hls_dir = '/var/www/hls'
@@ -14,6 +20,9 @@ hls_size = (1946 * 1024 * 1024)
 
 # General
 tmp_dir = '/data/tmp'
+
+service = services.Service('hls')
+
 
 # HLS archive
 class HlsArchive:
@@ -37,9 +46,9 @@ class HlsArchive:
         self.hls_url = hls_url if key == "stream" else f"{hls_url}?key={key}"
         self.max_file_size = max_file_size
         self.file_index = 0
-        dispatcher = updater.dispatcher
-        dispatcher.add_handler(CommandHandler(key, self.hls_stream))
-        updater.job_queue.run_repeating(self.hls_poll, hls_timer)
+        #dispatcher = updater.dispatcher
+        #dispatcher.add_handler(CommandHandler(key, self.hls_stream))
+        self.poll = updater.job_queue.run_repeating(self.hls_poll, hls_timer)
 
     def fname_base(self):
         return f"{tmp_dir}/hls_{self.key}_{self.file_index}"
@@ -137,3 +146,143 @@ class HlsArchive:
                     self.hls_count = 0
                     self.hls_push(context)
                 bot.send_message(chat_id=self.chat_id, text="Stream stopped")
+
+
+class HlsBot:
+    hls_key = {}
+    hls_chat = {}
+
+    def __init__(self, updater: Updater):
+        self.updater = updater
+        for client in service:
+            self.register(client)
+        updater.dispatcher.add_handler(CommandHandler('hls', self.message))
+
+    def hls_url(self, key):
+        return hls_url if key == "stream" else f"{hls_url}?key={key}"
+
+    def register(self, client: services.Client):
+        key = client.name
+        chat_id = client['chat_id']
+        if chat_id == None:
+            return
+        chat_id = int(chat_id)
+        adapt = client['adapt']
+        max_size = client['max_size']
+        if chat_id not in self.hls_chat:
+            self.hls_chat[chat_id] = []
+        self.hls_chat[chat_id].append(key)
+        self.hls_key[key] = HlsArchive(self.updater, key, chat_id, None, adapt, max_size)
+
+    def message(self, update, context):
+        chat_id = update.effective_chat.id
+        query = update.message.text
+        query = query.split(maxsplit=3)[1:]
+
+        try:
+            def key_info(update, key):
+                if key not in self.hls_key:
+                    text = f"Stream key `{key}` not registered"
+                else:
+                    hls = self.hls_key[key]
+                    client = service[key]
+                    info = client['info']
+                    text = f"""
+Stream `{key}` is {"*running* 📺" if hls.hls_running else "dead 👾"}
+URL: {helpers.escape_markdown(self.hls_url(key), 2)}
+{helpers.escape_markdown(info.decode('utf8'), 2) if info else ""}
+""".strip()
+                context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
+
+            action = query[0]
+            if action == 'info':
+                keys = []
+                if len(query) > 1:
+                    keys = [query[1]]
+                elif chat_id in self.hls_chat:
+                    keys = self.hls_chat[chat_id]
+                if keys:
+                    for key in keys:
+                        key_info(update, key)
+                    return
+                else:
+                    text = "No stream keys registered to this chat"
+
+            elif action == 'set':
+                key = query[1]
+                info = query[2]
+                if int(service[key]['chat_id']) != chat_id:
+                    text = f"Error: stream key `{key}` not registered to this chat"
+                else:
+                    service[key]['info'] = info
+                    key_info(update, key)
+                    return
+
+            elif action == 'register':
+                key = query[1]
+                client = service[key]
+                if client['chat_id'] != None:
+                    text = f"Error: stream key `{key}` already registered"
+                else:
+                    client['chat_id'] = chat_id
+                    self.register(client)
+                    key_info(update, key)
+                    return
+
+            elif action == 'deregister':
+                keys = []
+                if len(query) > 1:
+                    keys = [query[1]]
+                elif chat_id in self.hls_chat:
+                    keys = self.hls_chat[chat_id]
+                failed = set()
+                success = set()
+                for key in keys:
+                    if int(service[key]['chat_id']) != chat_id:
+                        failed.add(key)
+                    else:
+                        self.hls_key[key].poll.schedule_removal()
+                        del self.hls_key[key]
+                        del service[key]
+                        success.add(key)
+                self.hls_chat[chat_id] = [k for k in self.hls_chat[chat_id] if k not in success]
+                if not keys:
+                    text = "No stream keys registered to this chat"
+                else:
+                    text = ""
+                    if success:
+                        text += f"\nStream key {', '.join([f'`{k}`' for k in success])} deregistered"
+                    if failed:
+                        text += f"\nError: stream key {', '.join([f'`{k}`' for k in failed])} not registered to this chat"
+
+            else:
+                raise Exception("help")
+
+            context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text.strip())
+        except:
+            self.help(update, context)
+
+    def help(self, update, context):
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            text=f"""
+HLS archive service\\.
+This bot archives HLS stream pushed to this server\\.
+
+Commands:
+`/hls info [<key>]`
+Report HLS stream info of `<key>`\\.
+Report all stream info of this chat if `<key>` is not specified\\.
+`/hls register <key>`
+Register stream archive service of `<key>` to this chat\\.
+`/hls deregister [<key>]`
+Remove stream archive service of `<key>` from this chat\\.
+Remove all archive services assigned to this chat if `<key>` is not specified\\.
+`/hls set <key> <text...>`
+Append `<text...>` to stream info report of `<key>`\\.
+""".strip())
+
+
+def register(updater: Updater):
+    HlsBot(updater)

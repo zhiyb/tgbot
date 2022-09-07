@@ -25,8 +25,8 @@ class AliveBot:
 		self.updater = updater
 		self.clients = {}
 		for c in service:
-			if 'public' in service[c]:
-				self.new_client(int(c))
+			if 'public' in c:
+				self.new_client(int(c.name))
 		updater.dispatcher.add_handler(CommandHandler('alive', self.message))
 
 	def new_client(self, chat_id):

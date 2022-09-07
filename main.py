@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import logging
-import code, ping, lights, wfa, vault, alive
-from hls import HlsArchive
+import code, ping, lights, wfa, vault, alive, hls
 from config import *
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -45,20 +44,10 @@ def main():
     dispatcher.add_handler(CommandHandler('py', code.tgbot_python3))
     dispatcher.add_handler(CommandHandler('run', code.tgbot_run))
 
-    HlsArchive(updater, "stream",  chat_id_stream,  hls_chat)
-    HlsArchive(updater, "stream",  chat_id_stream,  hls_chat, adapt="_1080")
-    HlsArchive(updater, "stream2", chat_id_stream2)
-    HlsArchive(updater, "stream_test", chat_id_admin, max_file_size = (8 * 1024 * 1024))
-    HlsArchive(updater, "ds_test", chat_id_ds)
-
-    # This adds command /wfa
     wfa.register(updater)
-
-    # This adds command /vault
     vault.register(updater)
-
-    # This adds command /alive
     alive.register(updater)
+    hls.register(updater)
 
     for host in ping_hosts:
         ping.Ping(updater, host, chat_id_admin)

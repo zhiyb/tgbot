@@ -59,7 +59,7 @@ class Service:
 		dbcursor.execute(
 			'SELECT DISTINCT `client` FROM `services` WHERE `service` = %s',
 			(self.name,))
-		return [row[0].decode('ascii') for row in dbcursor.fetchall()].__iter__()
+		return [Client(self, row[0].decode('ascii')) for row in dbcursor.fetchall()].__iter__()
 
 class Client:
 	def __init__(self, service, client_name):
