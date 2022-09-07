@@ -1,7 +1,7 @@
 from telegram.ext import CommandHandler
 import wolframalpha
 import traceback
-from config import wfa_app_id
+from config import wfa_app_id, chat_id_admin
 
 __all__ = ['register']
 
