@@ -38,13 +38,13 @@ class HlsArchive:
     file_index = 0
     max_file_size = 0
 
-    def __init__(self, updater, key = "stream", chat_id = 0, archive_url = None, adapt = None, max_file_size = hls_size):
+    def __init__(self, updater, key = "stream", chat_id = 0, archive_url = None, adapt = None, max_file_size = None):
         self.key = key + adapt if adapt else key
         self.chat_id = chat_id
         self.archive_url = archive_url
         self.hls_dir = hls_adapt_dir if adapt else hls_dir
         self.hls_url = hls_url if key == "stream" else f"{hls_url}?key={key}"
-        self.max_file_size = max_file_size
+        self.max_file_size = max_file_size if max_file_size else hls_size
         self.file_index = 0
         #dispatcher = updater.dispatcher
         #dispatcher.add_handler(CommandHandler(key, self.hls_stream))
