@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import logging
-import code, ping, lights_ha, wfa, vault, alive, hls
+import code, ping, wfa, vault, alive, hls
 from config import *
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -51,8 +51,6 @@ def main():
 
     for host in ping_hosts:
         ping.Ping(updater, host, chat_id_admin)
-
-    lights_ha.Lights(updater, chat_id_admin)
 
     echo_handler = MessageHandler(Filters.text & (~Filters.command), echo)
     dispatcher.add_handler(echo_handler)
