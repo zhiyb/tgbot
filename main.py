@@ -47,9 +47,7 @@ def main():
     wfa.register(app)
     vault.register(app)
     alive.register(app)
-
-    if 0:
-        hls.register(app)
+    hls.register(app)
 
     ping.register(app)
     for host in ping_hosts:

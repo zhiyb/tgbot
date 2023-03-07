@@ -58,7 +58,7 @@ class HlsArchive:
     def fname_base_push(self):
         return f"{self.fname_base()}_push"
 
-    def hls_append(self, bot, fname):
+    def hls_append(self, fname):
         with open(os.path.join(self.hls_dir, fname), 'rb') as fsrc:
             with open(self.fname_live(), 'wb' if self.hls_count == 0 else 'ab') as fdst:
                 fdst.write(fsrc.read())
@@ -75,9 +75,9 @@ class HlsArchive:
             stderr=subprocess.STDOUT)
         return float(result.stdout)
 
-    def hls_push_async(self, context):
+    async def hls_push_async(self, context):
         bot = context.bot
-        src,push = context.job.context
+        src,push = context.job.data
         ext = ".mp4" #".ts"
         thumb = f"{push}.jpg"
         if ext == ".mp4":
@@ -87,10 +87,10 @@ class HlsArchive:
             src = dst
         os.system("ffmpeg -i %s -vframes 1 -an -s 400x225 -y %s"%(src, thumb))
         #time.sleep(18)
-        bot.send_video(chat_id=self.chat_id,
-                video="file://%s"%src, thumb=Path(thumb),
+        await bot.send_video(chat_id=self.chat_id,
+                video=src, thumb=Path(thumb),
                 width=1920, height=1080, duration=round(self.get_video_length(src)),
-                supports_streaming=True, disable_notification=True, timeout=300)
+                supports_streaming=True, disable_notification=True, write_timeout=300)
         os.unlink(src)
         os.unlink(thumb)
 
@@ -101,13 +101,13 @@ class HlsArchive:
         context.job_queue.run_once(self.hls_push_async, 0, (src, push))
 
     # Messages
-    def hls_stream(self, update, context):
+    async def hls_stream(self, update, context):
         text = f"Stream is running at {self.hls_url}" if self.hls_running else "Stream is dead"
         if self.archive_url:
             text += f"\nArchive: {self.archive_url}"
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
-    def hls_poll(self, context):
+    async def hls_poll(self, context):
         bot = context.bot
         try:
             with open(os.path.join(self.hls_dir, self.key + '.m3u8'), 'r') as f:
@@ -126,11 +126,11 @@ class HlsArchive:
 
                 for i in range(first, len(files)):
                     fname = files[i]
-                    if self.hls_append(bot, fname):
+                    if self.hls_append(fname):
                         self.hls_count += 1
                         if not self.hls_running:
                             self.hls_running = True
-                            bot.send_message(chat_id=self.chat_id,
+                            await bot.send_message(chat_id=self.chat_id,
                                     text="Stream running:\n%s"%self.hls_url)
 
                         size = os.path.getsize(self.fname_live())
@@ -144,7 +144,7 @@ class HlsArchive:
                 if self.hls_count != 0:
                     self.hls_count = 0
                     self.hls_push(context)
-                bot.send_message(chat_id=self.chat_id, text="Stream stopped")
+                await bot.send_message(chat_id=self.chat_id, text="Stream stopped")
 
 
 class HlsBot:
@@ -173,13 +173,13 @@ class HlsBot:
         self.hls_chat[chat_id].append(key)
         self.hls_key[key] = HlsArchive(self.app, key, chat_id, None, adapt, max_size)
 
-    def message(self, update, context):
+    async def message(self, update, context):
         chat_id = update.effective_chat.id
         query = update.message.text
         query = query.split(maxsplit=3)[1:]
 
         try:
-            def key_info(update, key):
+            async def key_info(update, key):
                 if key not in self.hls_key:
                     text = f"Stream key `{key}` not registered"
                 else:
@@ -191,7 +191,7 @@ Stream `{key}` is {"*running* 📺" if hls.hls_running else "dead 👾"}
 URL: {helpers.escape_markdown(self.hls_url(key), 2)}
 {helpers.escape_markdown(info.decode('utf8'), 2) if info else ""}
 """.strip()
-                context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
+                await context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
 
             action = query[0]
             if action == 'info':
@@ -202,7 +202,7 @@ URL: {helpers.escape_markdown(self.hls_url(key), 2)}
                     keys = self.hls_chat[chat_id]
                 if keys:
                     for key in keys:
-                        key_info(update, key)
+                        await key_info(update, key)
                     return
                 else:
                     text = "No stream keys registered to this chat"
@@ -214,7 +214,7 @@ URL: {helpers.escape_markdown(self.hls_url(key), 2)}
                     text = f"Error: stream key `{key}` not registered to this chat"
                 else:
                     service[key]['info'] = info
-                    key_info(update, key)
+                    await key_info(update, key)
                     return
 
             elif action == 'register':
@@ -225,7 +225,7 @@ URL: {helpers.escape_markdown(self.hls_url(key), 2)}
                 else:
                     client['chat_id'] = chat_id
                     self.register(client)
-                    key_info(update, key)
+                    await key_info(update, key)
                     return
 
             elif action == 'deregister':
@@ -257,12 +257,12 @@ URL: {helpers.escape_markdown(self.hls_url(key), 2)}
             else:
                 raise Exception("help")
 
-            context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text.strip())
+            await context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text.strip())
         except:
-            self.help(update, context)
+            await self.help(update, context)
 
-    def help(self, update, context):
-        context.bot.send_message(
+    async def help(self, update, context):
+        await context.bot.send_message(
             chat_id=update.effective_chat.id,
             parse_mode=ParseMode.MARKDOWN_V2,
             text=f"""
