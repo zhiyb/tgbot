@@ -1,8 +1,9 @@
-from telegram import ParseMode
-from telegram.ext import CommandHandler
-from telegram.utils import helpers
+from telegram.constants import ParseMode
+from telegram.ext import CommandHandler, CallbackContext
+from telegram import helpers
 from datetime import datetime, timedelta, timezone
 import services
+from common import *
 
 __all__ = ['register']
 
@@ -21,21 +22,21 @@ class AliveBot:
 	# No more public broadcasts after this time
 	public_interval_max = public_interval + interval * 7 + public_wait
 
-	def __init__(self, updater):
-		self.updater = updater
+	def __init__(self, app):
+		self.app = app
 		self.clients = {}
 		for c in service:
 			if 'public' in c:
 				self.new_client(int(c.name))
-		updater.dispatcher.add_handler(CommandHandler('alive', self.message))
+		app.add_handler(CommandHandler('alive', self.message))
 
 	def new_client(self, chat_id):
 		if chat_id in self.clients:
 			return
 		self.clients[chat_id] = {'client_msgs':[], 'public_msgs':[]}
-		self.updater.job_queue.run_once(self.check_client_job, timedelta(seconds=0), chat_id)
+		self.app.job_queue.run_once(self.check_client_job, timedelta(seconds=0), chat_id)
 
-	def check_client(self, chat_id):
+	async def check_client(self, chat_id):
 		utcnow = datetime.now(timezone.utc)
 		client = service[chat_id]
 		if 'public' not in client:
@@ -44,7 +45,7 @@ class AliveBot:
 		delta = utcnow - time
 		sec = delta.total_seconds()
 		next = self.interval - sec if sec < self.interval else self.interval
-		self.updater.job_queue.run_once(self.check_client_job, timedelta(seconds=next), chat_id)
+		self.app.job_queue.run_once(self.check_client_job, timedelta(seconds=next), chat_id)
 
 		if sec >= self.public_interval_max:
 			return
@@ -52,20 +53,19 @@ class AliveBot:
 		if sec >= self.interval:
 			sdelta = timedelta(seconds=round(sec))
 			text = f"_Beep\\-boop\\!_\nLast checked in *{helpers.escape_markdown(str(sdelta), 2)}* ago\\.\nCheck in? \\/alive"
-			msg = self.updater.bot.send_message(chat_id=chat_id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
-			for m in self.clients[chat_id]['client_msgs']:
-				self.delete(m)
+			msg = await self.app.bot.send_message(chat_id=chat_id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
+			await self.delete_msgs(self.clients[chat_id]['client_msgs'])
 			self.clients[chat_id]['client_msgs'] = [msg]
 
 		if sec >= self.public_interval:
-			self.updater.job_queue.run_once(self.public_job, timedelta(seconds=self.public_wait), chat_id)
+			self.app.job_queue.run_once(self.public_job, timedelta(seconds=self.public_wait), chat_id)
 
-	def check_client_job(self, context):
-		self.check_client(context.job.context)
+	async def check_client_job(self, context: CallbackContext):
+		self.check_client(context.job.data)
 
-	def public_job(self, context):
+	async def public_job(self, context: CallbackContext):
 		utcnow = datetime.now(timezone.utc)
-		chat_id = context.job.context
+		chat_id = context.job.data
 		client = service[chat_id]
 		if 'public' not in client:
 			return
@@ -75,19 +75,18 @@ class AliveBot:
 		if sec < self.public_interval:
 			return
 
-		msg = self.public_broadcast(chat_id, int(client['public']))
-		for m in self.clients[chat_id]['public_msgs']:
-			self.delete(m)
+		msg = await self.public_broadcast(chat_id, int(client['public']))
+		await self.delete_msgs(self.clients[chat_id]['public_msgs'])
 		self.clients[chat_id]['public_msgs'] = [msg]
 
-	def public_broadcast(self, chat_id, dst_id):
+	async def public_broadcast(self, chat_id, dst_id):
 		utcnow = datetime.now(timezone.utc)
 		client = service[chat_id]
 		time = datetime.fromtimestamp(float(client['timestamp']), timezone.utc)
 		delta = utcnow - time
 		sec = delta.total_seconds()
 
-		chat = self.updater.bot.get_chat(chat_id)
+		chat = await self.app.bot.get_chat(chat_id)
 		sdelta = timedelta(seconds=round(sec))
 		custom = client['custom']
 		text = f"""
@@ -97,40 +96,39 @@ Last seen *{helpers.escape_markdown(str(sdelta), 2)}* ago\\.
 
 {custom.decode('utf8') if custom else ''}
 """.strip()
-		return self.updater.bot.send_message(chat_id=dst_id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
+		return await self.app.bot.send_message(chat_id=dst_id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
 
 
-	def delete(self, msg):
+	async def delete(self, msg):
 		try:
-			msg.delete()
+			await msg.delete()
 		except:
 			pass
 
-	def delete_msgs(self, chat_id):
-		for m in self.clients[chat_id]['public_msgs']:
-			self.delete(m)
+	async def delete_msgs(self, msgs):
+		for m in msgs:
+			await self.delete(m)
+
+	async def delete_chat_msgs(self, chat_id):
+		await self.delete_msgs(self.clients[chat_id]['public_msgs'])
 		self.clients[chat_id]['public_msgs'] = []
-		for m in self.clients[chat_id]['client_msgs']:
-			self.delete(m)
+		await self.delete_msgs(self.clients[chat_id]['client_msgs'])
 		self.clients[chat_id]['client_msgs'] = []
 
-	def message(self, update, context):
+	async def message(self, update, context):
 		chat_id = update.effective_chat.id
 		client = service[chat_id]
 		client['timestamp'] = datetime.now(timezone.utc).timestamp()
 		if chat_id in self.clients:
-			self.delete_msgs(chat_id)
+			await self.delete_chat_msgs(chat_id)
 
 		query = update.message.text_markdown_v2
 		query = query.split(maxsplit=1)[1:]
 		if not query:
-			msg = context.bot.send_message(chat_id=chat_id,
+			msg = await context.bot.send_message(chat_id=chat_id,
 				parse_mode=ParseMode.MARKDOWN_V2, text="_Beep\\-boop\\!_")
 
-			def delete_messages(context):
-				for m in context.job.context:
-					self.delete(m)
-			self.updater.job_queue.run_once(delete_messages, timedelta(seconds=self.auto_delete_sec),
+			job_del_msg(self.app, timedelta(seconds=self.auto_delete_sec),
 				[update.message, msg])
 			return
 		try:
@@ -153,18 +151,18 @@ See you again in {round(timedelta(seconds=self.interval).total_seconds()/60.0/60
 					del client['custom']
 				else:
 					client['custom'] = query[1]
-				return self.public_broadcast(chat_id, chat_id)
+				return await self.public_broadcast(chat_id, chat_id)
 			elif action == 'test':
-				return self.public_broadcast(chat_id, chat_id)
+				return await self.public_broadcast(chat_id, chat_id)
 			else:
 				raise Exception("help")
 		except:
-			return self.help(update, context)
-		context.bot.send_message(chat_id=chat_id,
+			return await self.help(update, context)
+		await context.bot.send_message(chat_id=chat_id,
 			parse_mode=ParseMode.MARKDOWN_V2, text=text)
 
-	def help(self, update, context):
-		context.bot.send_message(
+	async def help(self, update, context):
+		await context.bot.send_message(
 			chat_id=update.effective_chat.id,
 			parse_mode=ParseMode.MARKDOWN_V2,
 			text=f"""
@@ -185,5 +183,5 @@ Test public broadcast message in private chat
 Append `<message...>` to public broadcast message
 """.strip())
 
-def register(updater):
-	AliveBot(updater)
+def register(app):
+	AliveBot(app)

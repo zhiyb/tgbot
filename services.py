@@ -59,7 +59,7 @@ class Service:
 		dbcursor.execute(
 			'SELECT DISTINCT `client` FROM `services` WHERE `service` = %s',
 			(self.name,))
-		return [Client(self, row[0].decode('ascii')) for row in dbcursor.fetchall()].__iter__()
+		return [Client(self, row[0]) for row in dbcursor.fetchall()].__iter__()
 
 class Client:
 	def __init__(self, service, client_name):
@@ -89,7 +89,7 @@ class Client:
 		dbcursor.execute(
 			'SELECT `key` FROM `services` WHERE `service` = %s AND `client` = %s',
 			(self.service.name, self.name))
-		return [row[0].decode('ascii') for row in dbcursor.fetchall()].__iter__()
+		return [row[0] for row in dbcursor.fetchall()].__iter__()
 
 def nocommit():
 	# Only for testing, no need to commit

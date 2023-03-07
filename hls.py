@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-from telegram import ParseMode
-from telegram.ext import Updater
-from telegram.utils import helpers
+from telegram.constants import ParseMode
+from telegram import helpers
 import os, traceback
 import subprocess
 from pathlib import Path
@@ -38,7 +37,7 @@ class HlsArchive:
     file_index = 0
     max_file_size = 0
 
-    def __init__(self, updater, key = "stream", chat_id = 0, archive_url = None, adapt = None, max_file_size = None):
+    def __init__(self, app, key = "stream", chat_id = 0, archive_url = None, adapt = None, max_file_size = None):
         self.key = key + adapt if adapt else key
         self.chat_id = chat_id
         self.archive_url = archive_url
@@ -46,9 +45,9 @@ class HlsArchive:
         self.hls_url = hls_url if key == "stream" else f"{hls_url}?key={key}"
         self.max_file_size = max_file_size if max_file_size else hls_size
         self.file_index = 0
-        #dispatcher = updater.dispatcher
+        #dispatcher = app.dispatcher
         #dispatcher.add_handler(CommandHandler(key, self.hls_stream))
-        self.poll = updater.job_queue.run_repeating(self.hls_poll, hls_timer)
+        self.poll = app.job_queue.run_repeating(self.hls_poll, hls_timer)
 
     def fname_base(self):
         return f"{tmp_dir}/hls_{self.key}_{self.file_index}"
@@ -152,11 +151,11 @@ class HlsBot:
     hls_key = {}
     hls_chat = {}
 
-    def __init__(self, updater: Updater):
-        self.updater = updater
+    def __init__(self, app):
+        self.app = app
         for client in service:
             self.register(client)
-        updater.dispatcher.add_handler(CommandHandler('hls', self.message))
+        app.add_handler(CommandHandler('hls', self.message))
 
     def hls_url(self, key):
         return hls_url if key == "stream" else f"{hls_url}?key={key}"
@@ -172,7 +171,7 @@ class HlsBot:
         if chat_id not in self.hls_chat:
             self.hls_chat[chat_id] = []
         self.hls_chat[chat_id].append(key)
-        self.hls_key[key] = HlsArchive(self.updater, key, chat_id, None, adapt, max_size)
+        self.hls_key[key] = HlsArchive(self.app, key, chat_id, None, adapt, max_size)
 
     def message(self, update, context):
         chat_id = update.effective_chat.id
@@ -284,5 +283,5 @@ Append `<text...>` to stream info report of `<key>`\\.
 """.strip())
 
 
-def register(updater: Updater):
-    HlsBot(updater)
+def register(app):
+    HlsBot(app)

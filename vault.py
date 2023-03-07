@@ -1,9 +1,10 @@
 from datetime import timedelta
 import hashlib, base64
 from cryptography.fernet import Fernet
-from telegram import ParseMode
+from telegram.constants import ParseMode
 from telegram.ext import CommandHandler
 import services
+from common import *
 
 __all__ = ['register']
 
@@ -57,11 +58,11 @@ class Vault:
 class VaultBot:
 	auto_delete_sec = 60
 
-	def __init__(self, updater):
-		self.updater = updater
-		updater.dispatcher.add_handler(CommandHandler('vault', self.message))
+	def __init__(self, app):
+		self.app = app
+		app.add_handler(CommandHandler('vault', self.message))
 
-	def message(self, update, context):
+	async def message(self, update, context):
 		query = update.message.text_markdown_v2
 		query = query.split(maxsplit=2)[1:]
 		action = 'help'
@@ -89,8 +90,7 @@ Delete vault associated with `<key>`
 `/vault get <key>`
 Retrieve content of vault associated with `<key>`
 """.strip()
-			print(text)
-			context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
+			await context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
 			return
 
 		data = data.split('\n', maxsplit=1)
@@ -120,17 +120,13 @@ Retrieve content of vault associated with `<key>`
 			text = 'No record'
 		else:
 			text = 'Record found:\n' + text
-		msgs = context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
+		msgs = await context.bot.send_message(chat_id=update.effective_chat.id, parse_mode=ParseMode.MARKDOWN_V2, text=text)
 		msgs = [update.message, msgs]
 
-		def delete_messages(context):
-			for m in context.job.context:
-				m.delete()
+		job_del_msg(self.app, timedelta(seconds=self.auto_delete_sec), msgs)
 
-		self.updater.job_queue.run_once(delete_messages, timedelta(seconds=self.auto_delete_sec), msgs)
-
-def register(updater):
-	VaultBot(updater)
+def register(app):
+	VaultBot(app)
 
 def main():
 	services.nocommit()

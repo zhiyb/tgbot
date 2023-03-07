@@ -21,7 +21,7 @@ def wfa_format_all(res):
             text += ('\n' if text else '') + '💡 ' + pod.title + podtext
     return text
 
-def wfa(update, context):
+async def wfa(update, context):
     query = update.message.text
     query = query.split(' ')[1:]
     query = ' '.join(query)
@@ -35,9 +35,8 @@ def wfa(update, context):
         except:
             text = "What happened, something went wrong"
             report = "What happened?\n" + query + "\n" + traceback.format_exc()
-            context.bot.send_message(chat_id=chat_id_admin, text=report)
-    import telegram
-    context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+            await context.bot.send_message(chat_id=chat_id_admin, text=report)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
-def register(updater):
-    updater.dispatcher.add_handler(CommandHandler('wfa', wfa))
+def register(app):
+    app.add_handler(CommandHandler('wfa', wfa))

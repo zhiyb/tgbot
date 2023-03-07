@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-import json
-import traceback
-import urllib.parse
-import urllib.request
+import json, traceback
+import urllib.parse, urllib.request
+from telegram.ext import CommandHandler
+
+__all__ = ["register"]
+
+def register(app):
+    app.add_handler(CommandHandler('python3', tgbot_python3))
+    app.add_handler(CommandHandler('py', tgbot_python3))
+    app.add_handler(CommandHandler('run', tgbot_run))
 
 def run(lan, src):
     src = urllib.parse.quote(src)
@@ -37,23 +43,23 @@ def run(lan, src):
 def run_python3(src):
     return run('python3', src)
 
-def tgbot_run(update, context):
+async def tgbot_run(update, context):
     try:
         query = update.message.text
         query = query.split(maxsplit = 1)[1]
         lan, query = query.split(maxsplit = 1)
         text = run(lan, query)
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
     except:
         text = traceback.format_exc(0)
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
-def tgbot_python3(update, context):
+async def tgbot_python3(update, context):
     try:
         query = update.message.text
         query = query.split(maxsplit = 1)[1]
         text = run_python3(query)
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
     except:
         text = traceback.format_exc(0)
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
