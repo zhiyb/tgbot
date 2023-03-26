@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-import sys, os, subprocess, tempfile, asyncio
+import os, subprocess, tempfile, asyncio
 from pathlib import Path, PurePath
 from argparse import ArgumentParser
-
-#print('\n'.join(sys.path))
 
 from telegram.constants import ParseMode
 from telegram.ext import Application
 import logging
 import sys, socket
 
-from config import token, base_url, chat_id_admin
+from config import token, base_url, base_local, chat_id_admin
 
 # General
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -49,8 +47,7 @@ def send_video(bot, chat, path):
             video=video_data, thumb=thumb_data,
             #video=f"file://{server_video}", thumb=thumb_bytes,
             width=info['width'], height=info['height'], duration=round(info['duration']),
-            supports_streaming=True, disable_notification=True, timeout=300))
-
+            supports_streaming=True, disable_notification=True, write_timeout=300))
     os.system(f"ssh vps rm {video_server}")
     os.remove(thumb)
 
@@ -67,7 +64,12 @@ def main():
     args, msg = parser.parse_known_args()
     print(args)
 
-    app = Application.builder().token(token).build()
+    app = Application.builder() \
+        .base_url(f"{base_url}/bot") \
+        .base_file_url(f"{base_url}/file/bot") \
+        .local_mode(base_local) \
+        .read_timeout(1000).write_timeout(1000) \
+        .token(token).build()
 
     if args.video:
         send_video(app.bot, args.chat, args.video)

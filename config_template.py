@@ -1,5 +1,6 @@
 token = '1234567890:abcdefghijklmnopqrstuvwxyz012345678'
-base_url = 'http://10.0.0.1:8081/bot'
+base_url = 'https://api.telegram.org'
+base_local = False
 
 chat_id_admin = 123456789
 chat_id_stream = -1001234567890

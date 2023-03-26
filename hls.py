@@ -88,7 +88,7 @@ class HlsArchive:
         os.system("ffmpeg -i %s -vframes 1 -an -s 400x225 -y %s"%(src, thumb))
         #time.sleep(18)
         await bot.send_video(chat_id=self.chat_id,
-                video=src, thumb=Path(thumb),
+                video=f"file://{src}", thumb=Path(thumb),
                 width=1920, height=1080, duration=round(self.get_video_length(src)),
                 supports_streaming=True, disable_notification=True, write_timeout=300)
         os.unlink(src)

@@ -39,7 +39,12 @@ async def echo(update: Update, context: CallbackContext):
 
 
 def main():
-    app = Application.builder().token(token).build()
+    app = Application.builder() \
+        .base_url(f"{base_url}/bot") \
+        .base_file_url(f"{base_url}/file/bot") \
+        .local_mode(base_local) \
+        .read_timeout(1000).write_timeout(1000) \
+        .token(token).build()
 
     app.add_handler(CommandHandler('start', start))
 
