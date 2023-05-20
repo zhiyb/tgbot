@@ -167,6 +167,8 @@ class HlsBot:
             return
         chat_id = int(chat_id)
         adapt = client['adapt']
+        if adapt:
+            adapt = adapt.decode()
         max_size = client['max_size']
         if chat_id not in self.hls_chat:
             self.hls_chat[chat_id] = []
