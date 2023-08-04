@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from telegram.constants import ParseMode
 from telegram.ext import Application
 import logging
-import sys, socket
+import sys, socket, json
 
 from config import token, base_url, base_local, chat_id_admin
 
@@ -19,13 +19,14 @@ def get_video_info(path):
         "ffprobe", "-v", "error", "-select_streams", "v:0",
         "-show_entries", "stream=width,height",
         "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", path],
+        "-of", "json", path],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
-    info = result.stdout.split()
-    return {'width': int(info[0]),
-            'height': int(info[1]),
-            'duration': float(info[2])}
+    r = json.loads(result.stdout)
+    r = {'width': r["streams"][0]["width"],
+         'height': r["streams"][0]["height"],
+         'duration': float(r["format"]["duration"])}
+    return r
 
 def send_video(bot, chat, path):
     info = get_video_info(path)
@@ -62,7 +63,6 @@ def main():
                         help='Send video file')
 
     args, msg = parser.parse_known_args()
-    print(args)
 
     app = Application.builder() \
         .base_url(f"{base_url}/bot") \
