@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 from telegram.constants import ParseMode
 from telegram import helpers
-import os, traceback
-import subprocess
+import os, traceback, subprocess
+import json
 from pathlib import Path
 from telegram.ext import CommandHandler
 from config import hls_url
@@ -67,13 +67,19 @@ class HlsArchive:
         return 0
 
     # https://stackoverflow.com/a/3844467
-    def get_video_length(self, filename):
-        result = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
-                                "format=duration", "-of",
-                                "default=noprint_wrappers=1:nokey=1", filename],
+    def get_video_info(self, path):
+        result = subprocess.run([
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-show_entries", "format=duration",
+            "-of", "json", path],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT)
-        return float(result.stdout)
+        r = json.loads(result.stdout)
+        r = {'width': r["streams"][0]["width"],
+             'height': r["streams"][0]["height"],
+             'duration': float(r["format"]["duration"])}
+        return r
 
     async def hls_push_async(self, context):
         bot = context.bot
@@ -87,9 +93,10 @@ class HlsArchive:
             src = dst
         os.system("ffmpeg -i %s -vframes 1 -an -s 400x225 -y %s"%(src, thumb))
         #time.sleep(18)
+        info = self.get_video_info(src)
         await bot.send_video(chat_id=self.chat_id,
                 video=f"file://{src}", thumb=Path(thumb),
-                width=1920, height=1080, duration=round(self.get_video_length(src)),
+                width=info['width'], height=info['height'], duration=round(info['duration']),
                 supports_streaming=True, disable_notification=True, write_timeout=300)
         os.unlink(src)
         os.unlink(thumb)
