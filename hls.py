@@ -37,8 +37,10 @@ class HlsArchive:
     file_index = 0
     max_file_size = 0
 
-    def __init__(self, app, key = "stream", chat_id = 0, archive_url = None, adapt = None, max_file_size = None):
+    def __init__(self, app, key = "stream", chat_id = 0, archive_url = None,
+                 stype = None, adapt = None, max_file_size = None):
         self.key = key + adapt if adapt else key
+        self.type = stype
         self.chat_id = chat_id
         self.archive_url = archive_url
         self.hls_dir = hls_adapt_dir if adapt else hls_dir
@@ -81,25 +83,49 @@ class HlsArchive:
              'duration': float(r["format"]["duration"])}
         return r
 
+    def get_audio_info(self, path):
+        result = subprocess.run([
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "format=duration",
+            "-of", "json", path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+        r = json.loads(result.stdout)
+        r = {'duration': float(r["format"]["duration"])}
+        return r
+
     async def hls_push_async(self, context):
         bot = context.bot
         src,push = context.job.data
-        ext = ".mp4" #".ts"
-        thumb = f"{push}.jpg"
-        if ext == ".mp4":
+        if self.type == "audio_only":
+            ext = ".m4a"
             dst = f"{push}{ext}"
-            os.system("ffmpeg -i %s -c copy -movflags faststart -y %s"%(src, dst))
+            os.system(f"ffmpeg -i {src} -vn -c:a copy -y {dst}")
             os.unlink(src)
             src = dst
-        os.system("ffmpeg -i %s -vframes 1 -an -s 400x225 -y %s"%(src, thumb))
-        #time.sleep(18)
-        info = self.get_video_info(src)
-        await bot.send_video(chat_id=self.chat_id,
-                video=f"file://{src}", thumb=Path(thumb),
-                width=info['width'], height=info['height'], duration=round(info['duration']),
-                supports_streaming=True, disable_notification=True, write_timeout=300)
-        os.unlink(src)
-        os.unlink(thumb)
+            info = self.get_audio_info(src)
+            await bot.send_audio(chat_id=self.chat_id,
+                    audio=f"file://{src}",
+                    duration=round(info['duration']),
+                    disable_notification=True, write_timeout=300)
+            os.unlink(src)
+        else:
+            ext = ".mp4" #".ts"
+            thumb = f"{push}.jpg"
+            if ext == ".mp4":
+                dst = f"{push}{ext}"
+                os.system("ffmpeg -i %s -c copy -movflags faststart -y %s"%(src, dst))
+                os.unlink(src)
+                src = dst
+            os.system("ffmpeg -i %s -vframes 1 -an -s 400x225 -y %s"%(src, thumb))
+            #time.sleep(18)
+            info = self.get_video_info(src)
+            await bot.send_video(chat_id=self.chat_id,
+                    video=f"file://{src}", thumb=Path(thumb),
+                    width=info['width'], height=info['height'], duration=round(info['duration']),
+                    supports_streaming=True, disable_notification=True, write_timeout=300)
+            os.unlink(src)
+            os.unlink(thumb)
 
     def hls_push(self, context):
         src = self.fname_live()
@@ -138,7 +164,7 @@ class HlsArchive:
                         if not self.hls_running:
                             self.hls_running = True
                             await bot.send_message(chat_id=self.chat_id,
-                                    text="Stream running:\n%s"%self.hls_url)
+                                    text=f"Stream {self.key} running:\n{self.hls_url}")
 
                         size = os.path.getsize(self.fname_live())
                         if size >= self.max_file_size:
@@ -151,7 +177,7 @@ class HlsArchive:
                 if self.hls_count != 0:
                     self.hls_count = 0
                     self.hls_push(context)
-                await bot.send_message(chat_id=self.chat_id, text="Stream stopped")
+                await bot.send_message(chat_id=self.chat_id, text=f"Stream {self.key} stopped")
 
 
 class HlsBot:
@@ -173,6 +199,9 @@ class HlsBot:
         if chat_id == None:
             return
         chat_id = int(chat_id)
+        stype = client['type']
+        if stype:
+            stype = stype.decode()
         adapt = client['adapt']
         if adapt:
             adapt = adapt.decode()
@@ -180,7 +209,7 @@ class HlsBot:
         if chat_id not in self.hls_chat:
             self.hls_chat[chat_id] = []
         self.hls_chat[chat_id].append(key)
-        self.hls_key[key] = HlsArchive(self.app, key, chat_id, None, adapt, max_size)
+        self.hls_key[key] = HlsArchive(self.app, key, chat_id, None, stype, adapt, max_size)
 
     async def message(self, update, context):
         chat_id = update.effective_chat.id
