@@ -55,7 +55,10 @@ class HlsArchive:
         return f"{tmp_dir}/hls_{self.key}_{self.file_index}"
 
     def fname_live(self):
-        return f"{self.fname_base()}_live.ts"
+        if self.type == "audio_only":
+            return f"{self.fname_base()}_live.aac"
+        else:
+            return f"{self.fname_base()}_live.ts"
 
     def fname_base_push(self):
         return f"{self.fname_base()}_push"
@@ -145,7 +148,7 @@ class HlsArchive:
         try:
             with open(os.path.join(self.hls_dir, self.key + '.m3u8'), 'r') as f:
                 playlist = f.read()
-                files = list(filter(lambda f: f.endswith('.ts'), playlist.split("\n")))
+                files = list(filter(lambda f: f.endswith('.ts') or f.endswith('.aac'), playlist.split("\n")))
                 last = files[-1]
                 if last == self.hls_last:
                     return
